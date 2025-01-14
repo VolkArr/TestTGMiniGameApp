@@ -12,12 +12,15 @@ document.body.appendChild(app.view);
 // Разрешим сортировку по Z, чтобы текст/GUI рисовались поверх
 app.stage.sortableChildren = true;
 
+
 //-----------------------------------------------------
 // 2. Параметры игры
 //-----------------------------------------------------
-const maxHP = 10;
+let maxHP = 10;
 let playerHP = maxHP;
 let playerScore = 0; // Очки игрока
+
+let isInterfaceLocked = false; // Флаг блокировки интерфейса
 
 // Для врагов сделаем отдельно текущие показатели
 let enemyHP = 10;              // HP у текущего врага
@@ -28,6 +31,15 @@ let currentFloor = 1;          // Этаж "башни"
 const playerRadius = 30; 
 const enemyHeight = 60;
 const HP_BAR_WIDTH = 100;
+
+// Инвентарь игрока
+const inventory = []; // Массив объектов { effect: "increaseHP", level: 1 }
+const maxInventorySlots = 16; // 16 ячеек
+
+// Модификаторы предметов
+let attackMod = 0; // Увеличивает урон
+let armorMod = 0;  // Уменьшает получаемый урон
+let healthBonus = 0; // Дополнительное максимальное здоровье
 
 //-----------------------------------------------------
 // 3. Фон (небо, земля, дорожка, солнце, деревья)
@@ -83,6 +95,63 @@ for (let i = 0; i < 3; i++) {
   tree.y = app.screen.height / 2 - 60;
   app.stage.addChild(tree);
 }
+
+// //-----------------------------------------------------
+// // 1. Создаём контейнер для катсцен
+// //-----------------------------------------------------
+// let currentSceneIndex = 0;
+// const scenes = [
+//     { image: "scene1.png", text: "Синий шарик идет по дороге." },
+//     { image: "scene2.png", text: "Синий шарик видит деревню в огне." },
+//     { image: "scene3.png", text: "Синий шарик бежит на помощь." },
+//     { image: "scene4.png", text: "Синий шарик сталкивается с врагом." }
+// ];
+
+// const cutsceneContainer = new PIXI.Container();
+// cutsceneContainer.name = "cutsceneContainer";
+// app.stage.addChild(cutsceneContainer);
+
+// // Фон для сцены
+// const sceneBackground = new PIXI.Graphics();
+// sceneBackground.beginFill(0x000000);
+// sceneBackground.drawRect(0, 0, app.screen.width, app.screen.height * 0.6);
+// sceneBackground.endFill();
+// cutsceneContainer.addChild(sceneBackground);
+
+// // Место для текста
+// const textBackground = new PIXI.Graphics();
+// textBackground.beginFill(0x8B4513); // Коричневый
+// textBackground.drawRect(0, app.screen.height * 0.6, app.screen.width, app.screen.height * 0.4);
+// textBackground.endFill();
+// cutsceneContainer.addChild(textBackground);
+
+// // Текстовое поле
+// const textStyle = new PIXI.TextStyle({
+//     fill: "#FFFFFF",
+//     fontSize: 20,
+//     wordWrap: true,
+//     wordWrapWidth: app.screen.width - 20
+// });
+// const textField = new PIXI.Text("", textStyle);
+// textField.x = 10;
+// textField.y = app.screen.height * 0.6 + 10;
+// cutsceneContainer.addChild(textField);
+
+// // Кнопка "Дальше"
+// const nextButton = createButton("Дальше", 100, 40);
+// nextButton.x = app.screen.width - 120;
+// nextButton.y = app.screen.height - 50;
+// nextButton.on("pointerdown", () => {
+//     showNextScene();
+// });
+// cutsceneContainer.addChild(nextButton);
+
+
+// function startCutscene() {
+//   currentSceneIndex = 0;
+//   cutsceneContainer.visible = true;
+//   showNextScene();
+// }
 
 //-----------------------------------------------------
 // 4. Персонажи: наш (круг) и враг (треугольник)
@@ -213,9 +282,9 @@ function createButton(label, width = 80, height = 30) {
   button.addChild(bg);
 
   const txtStyle = new PIXI.TextStyle({
-    fill: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
+      fill: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: 'bold',
   });
   const text = new PIXI.Text(label, txtStyle);
   text.anchor.set(0.5);
@@ -301,6 +370,7 @@ app.stage.addChild(fightButton);
 fightButton.interactive = true;
 fightButton.buttonMode = true;
 fightButton.on("pointerdown", () => {
+  if (isInterfaceLocked) return;
   startFightAnimation();
 });
 
@@ -309,8 +379,8 @@ fightButton.on("pointerdown", () => {
 //-----------------------------------------------------
 const inventoryButton = new PIXI.Container();
 const inventoryIcon = PIXI.Sprite.from('./inventory_icon.png'); // Замените на путь к вашей иконке
-inventoryIcon.width = 512;
-inventoryIcon.height = 512;
+inventoryIcon.width = 50;
+inventoryIcon.height = 50;
 inventoryButton.addChild(inventoryIcon);
 
 inventoryButton.x = app.screen.width - 70;
@@ -319,6 +389,34 @@ app.stage.addChild(inventoryButton);
 
 inventoryButton.interactive = true;
 inventoryButton.buttonMode = true;
+
+// Интерфейс инвентаря
+const inventoryUI = new PIXI.Container();
+inventoryUI.visible = false; // По умолчанию скрыт
+inventoryUI.x = app.screen.width / 2 - 100;
+inventoryUI.y = app.screen.height / 2 - 100;
+app.stage.addChild(inventoryUI);
+
+// Создаём ячейки инвентаря
+for (let i = 0; i < maxInventorySlots; i++) {
+    const slot = new PIXI.Container();
+    const bg = new PIXI.Graphics();
+    bg.lineStyle(2, 0xFFFFFF);
+    bg.beginFill(0x333333);
+    bg.drawRect(0, 0, 50, 50);
+    bg.endFill();
+    slot.addChild(bg);
+    slot.bg = bg;
+
+    slot.x = (i % 4) * 55; // 4 слота в ряд
+    slot.y = Math.floor(i / 4) * 55;
+    inventoryUI.addChild(slot);
+}
+
+// Кнопка для открытия/закрытия инвентаря
+inventoryButton.on("pointerdown", () => {
+    inventoryUI.visible = !inventoryUI.visible; // Переключение видимости
+});
 
 //-----------------------------------------------------
 // 7. Анимация столкновений
@@ -363,7 +461,7 @@ function doDamagePhase() {
 
   // 1) Игрок бьёт
   if (enemyBlock !== selectedAttack) {
-    const damage = getDamage(selectedAttack);
+    const damage = getDamage(selectedAttack) + attackMod;
     enemyHP -= damage;
     playerScore += damage; // Добавляем очки за урон
     if (enemyHP < 0) enemyHP = 0;
@@ -373,7 +471,8 @@ function doDamagePhase() {
   // 2) Если враг не умер - он бьёт
   if (enemyHP > 0) {
     if (selectedBlock !== enemyAttack) {
-      playerHP -= getDamage(enemyAttack);
+      const receivedDamage = Math.max(0, getDamage(enemyAttack) - armorMod); // Урон с учётом брони
+      playerHP -= receivedDamage;
       if (playerHP < 0) playerHP = 0;
       updateHPBar(playerHPBar, playerHP);
     }
@@ -413,6 +512,10 @@ function spawnNewEnemy() {
   meetingXEnemy = app.screen.width * 0.5 + 60;
 
   console.log(`Появился новый враг (этаж ${currentFloor}), HP=${enemyHP}`);
+
+    setTimeout(() => {
+      showItemSelection();
+  }, 500);
 }
 
 //-----------------------------------------------------
@@ -486,9 +589,332 @@ app.ticker.add(() => {
   }
 });
 
+
+function showItemSelection() {
+  
+  if (isInterfaceLocked) return; // Если интерфейс заблокирован, ничего не делаем
+    isInterfaceLocked = true; // Блокируем интерфейс
+
+  const itemSelectionUI = new PIXI.Container();
+  itemSelectionUI.name = "itemSelectionUI";
+  itemSelectionUI.x = app.screen.width / 2 - 150;
+  itemSelectionUI.y = app.screen.height / 2 - 100;
+  app.stage.addChild(itemSelectionUI);
+
+  const items = [
+      { name: "Броня", effect: "reduceDamage", icon: "armor_icon.png" },
+      { name: "Оружие", effect: "increaseDamage", icon: "weapon_icon.png" },
+      { name: "Крепкое тело", effect: "increaseHP", icon: "body_icon.png" }
+  ];
+
+  items.forEach((item, index) => {
+      const itemButton = new PIXI.Container();
+      const bg = new PIXI.Graphics();
+      bg.beginFill(0x444444);
+      bg.drawRect(0, 0, 80, 80);
+      bg.endFill();
+      itemButton.addChild(bg);
+
+      const icon = PIXI.Sprite.from(item.icon);
+      icon.width = 60;
+      icon.height = 60;
+      icon.x = 10;
+      icon.y = 10;
+      itemButton.addChild(icon);
+
+      const label = new PIXI.Text(item.name, { fill: "#ffffff", fontSize: 14 });
+      label.anchor.set(0.5);
+      label.x = 40;
+      label.y = 70;
+      itemButton.addChild(label);
+
+      itemButton.x = index * 100;
+      itemButton.interactive = true;
+      itemButton.buttonMode = true;
+      itemButton.on("pointerdown", () => {
+          addItemToInventory(item.effect);
+          isInterfaceLocked = false; // Разблокируем интерфейс
+      });
+
+      itemSelectionUI.addChild(itemButton);
+  });
+}
+
+function addItemToInventory(effect) {
+  if (!effect) {
+      console.error("Попытка добавить предмет с неопределённым эффектом!");
+      return;
+  }
+
+  // Проверяем, есть ли уже такой предмет в инвентаре
+  const existingItem = inventory.find(item => item.effect === effect);
+  if (existingItem) {
+      existingItem.level += 1; // Увеличиваем уровень
+      console.log(`${getItemName(effect)} улучшено до уровня ${existingItem.level}`);
+  } else if (inventory.length < maxInventorySlots) {
+      inventory.push({ effect, level: 1 }); // Добавляем новый предмет
+      console.log(`Добавлен новый предмет: ${getItemName(effect)}`);
+  } else {
+      console.log("Инвентарь заполнен!");
+  }
+
+  // Применяем эффект предмета
+  applyItemEffect(effect);
+
+  // Закрываем интерфейс выбора предметов
+  const itemSelectionUI = app.stage.getChildByName("itemSelectionUI");
+  if (itemSelectionUI) {
+      app.stage.removeChild(itemSelectionUI);
+  }
+
+  // Обновляем инвентарь
+  updateInventoryUI();
+}
+
+function updateInventoryUI() {
+  inventoryUI.children.forEach((slot, index) => {
+      if (!slot.bg) return; // Пропускаем слоты без фона
+      slot.removeChildren(); // Удаляем содержимое слота
+
+      const item = inventory[index];
+
+      if (item) {
+        if (!item.effect) {
+          console.error(`Предмет с индексом ${index} не имеет эффекта!`);
+          return;
+        }
+        const iconPath = {
+          "reduceDamage": "armor_icon.png",
+          "increaseDamage": "weapon_icon.png",
+          "increaseHP": "body_icon.png"
+          }[item.effect];
+          
+          if (!iconPath) {
+              console.error(`Иконка для эффекта ${item.effect} не найдена!`);
+          }
+
+
+
+          // Иконка предмета
+          try {
+            const icon = PIXI.Sprite.from(iconPath);
+            icon.width = 40;
+            icon.height = 40;
+            icon.x = 5;
+            icon.y = 5;
+            slot.addChild(icon);
+        } catch (error) {
+            console.error(`Ошибка при создании иконки для эффекта ${item.effect}:`, error);
+        }
+
+          // Уровень предмета (например, "+2")
+          const levelText = new PIXI.Text(`+${item.level}`, {
+              fill: "#ffffff",
+              fontSize: 14,
+              fontWeight: "bold"
+          });
+          levelText.anchor.set(0.5);
+          levelText.x = 45;
+          levelText.y = 45;
+          slot.addChild(levelText);
+
+          // Добавляем обработчик нажатия
+          slot.interactive = true;
+          slot.buttonMode = true;
+          slot.on("pointerdown", () => {
+              showItemDescription(item.effect, iconPath, item.level);
+          });
+      } else {
+          // Пустой слот
+          const placeholder = new PIXI.Graphics();
+          placeholder.lineStyle(1, 0x777777);
+          placeholder.beginFill(0x444444, 0.1);
+          placeholder.drawRect(5, 5, 40, 40);
+          placeholder.endFill();
+          slot.addChild(placeholder);
+      }
+  });
+}
+
+
+function applyItemEffect(effect) {
+    switch (effect) {
+        case "reduceDamage":
+            armorMod += 1;
+            console.log("Уменьшение получаемого урона на 1");
+            break;
+        case "increaseDamage":
+            attackMod += 1;
+            console.log("Увеличение наносимого урона на 1");
+            break;
+          case "increaseHP":
+            healthBonus += 2; // Увеличиваем максимальное здоровье
+            maxHP += 2; // Обновляем максимальное здоровье
+            playerHP += 2; // Лечим игрока на 2 HP
+          
+            // Убедимся, что текущее здоровье не превышает новый максимум
+            if (playerHP > maxHP) {
+                playerHP = maxHP;
+            }
+          
+              // Обновляем maxValue у HP бара и вызываем обновление
+            playerHPBar.maxValue = maxHP;
+            updateHPBar(playerHPBar, playerHP);
+          
+            console.log("Максимальное здоровье увеличено на 2, текущее здоровье восстановлено");
+            break;
+          
+    }
+}
+
+function showItemDescription(effect, iconPath, level) {
+  if (isInterfaceLocked) return; // Если интерфейс заблокирован, ничего не делаем
+    isInterfaceLocked = true; // Блокируем интерфейс
+
+  // Создаём контейнер для карточки
+  const descriptionCard = new PIXI.Container();
+  descriptionCard.x = app.screen.width / 2 - 100;
+  descriptionCard.y = app.screen.height / 2 - 100;
+  descriptionCard.name = "descriptionCard"; // Для удобного удаления
+  app.stage.addChild(descriptionCard);
+
+  // Фон карточки
+  const bg = new PIXI.Graphics();
+  bg.beginFill(0x777777);
+  bg.drawRect(0, 0, 200, 150);
+  bg.endFill();
+  descriptionCard.addChild(bg);
+
+  // Иконка предмета
+  const icon = PIXI.Sprite.from(iconPath);
+  icon.width = 50;
+  icon.height = 50;
+  icon.x = 10;
+  icon.y = 10;
+  descriptionCard.addChild(icon);
+
+  // Название предмета
+  const nameText = new PIXI.Text(`${getItemName(effect)} +${level}`, {
+      fill: "#ffffff",
+      fontSize: 16,
+      fontWeight: "bold"
+  });
+  nameText.x = 70;
+  nameText.y = 15;
+  descriptionCard.addChild(nameText);
+
+  // Описание предмета
+  const descriptionText = new PIXI.Text(getItemDescription(effect), {
+      fill: "#ffffff",
+      fontSize: 14,
+      wordWrap: true,
+      wordWrapWidth: 180
+  });
+  descriptionText.x = 10;
+  descriptionText.y = 70;
+  descriptionCard.addChild(descriptionText);
+
+  // Кнопка закрытия
+  const closeButton = new PIXI.Graphics();
+  closeButton.beginFill(0xff4444); // Красный цвет кнопки
+  closeButton.drawRect(0, 0, 20, 20);
+  closeButton.endFill();
+  closeButton.interactive = true;
+  closeButton.buttonMode = true;
+  closeButton.x = 180; // Позиция в правом верхнем углу карточки
+  closeButton.y = 0;
+  closeButton.on("pointerdown", () => {
+      app.stage.removeChild(descriptionCard); // Удаляем карточку
+      isInterfaceLocked = false; // Разблокируем интерфейс
+  });
+  descriptionCard.addChild(closeButton);
+
+  // Текст "X" на кнопке закрытия
+  const closeText = new PIXI.Text("X", {
+      fill: "#ffffff",
+      fontSize: 14,
+      fontWeight: "bold",
+      align: "center"
+  });
+  closeText.anchor.set(0.5);
+  closeText.x = closeButton.x + 10;
+  closeText.y = closeButton.y + 10;
+  descriptionCard.addChild(closeText);
+}
+
+
+
+
+// Функция для получения названия предмета
+function getItemName(effect) {
+  switch (effect) {
+      case "reduceDamage":
+          return "Броня";
+      case "increaseDamage":
+          return "Оружие";
+      case "increaseHP":
+          return "Крепкое тело";
+      default:
+          return "Неизвестный предмет";
+  }
+}
+
+// Функция для получения описания предмета
+function getItemDescription(effect) {
+  switch (effect) {
+      case "reduceDamage":
+          return "Уменьшает получаемый урон на 1 за каждый уровень.";
+      case "increaseDamage":
+          return "Увеличивает наносимый урон на 1 за каждый уровень.";
+      case "increaseHP":
+          return "Увеличивает максимальное здоровье на 2 за каждый уровень.";
+      default:
+          return "Описание отсутствует.";
+  }
+}
+
+
+// function showNextScene() {
+//   if (currentSceneIndex >= scenes.length) {
+//       // Завершаем катсцену и начинаем игру
+//       app.stage.removeChild(cutsceneContainer);
+//       startGame(); // Функция, запускающая основную игру
+//       return;
+//   }
+
+//   const scene = scenes[currentSceneIndex];
+//   loadScene(scene.image, scene.text);
+//   currentSceneIndex++;
+// }
+
+// function loadScene(imagePath, text) {
+//   // Удаляем предыдущую сцену
+//   cutsceneContainer.removeChildren(1, cutsceneContainer.children.length - 1);
+
+//   // Загружаем новое изображение сцены
+//   const sceneImage = PIXI.Sprite.from(imagePath);
+//   sceneImage.width = app.screen.width;
+//   sceneImage.height = app.screen.height * 0.6;
+//   cutsceneContainer.addChildAt(sceneImage, 1);
+
+//   // Обновляем текст
+//   textField.text = "";
+//   let charIndex = 0;
+//   const typingInterval = setInterval(() => {
+//       if (charIndex < text.length) {
+//           textField.text += text[charIndex];
+//           charIndex++;
+//       } else {
+//           clearInterval(typingInterval); // Завершаем печать текста
+//       }
+//   }, 50); // Скорость появления текста (в мс)
+// }
+
 //-----------------------------------------------------
 // 12. Адаптив при resize (опционально)
 //-----------------------------------------------------
 window.addEventListener("resize", () => {
   fightButton.y = app.screen.height - 60;
 });
+
+
