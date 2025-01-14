@@ -9,7 +9,7 @@ const app = new PIXI.Application({
 });
 document.body.appendChild(app.view);
 
-// Разрешим сортировку по Z, чтобы текст рисовался поверх
+// Чтобы текст точно был над всеми элементами, разрешим сортировку по Z
 app.stage.sortableChildren = true;
 
 //-----------------------------------------------------
@@ -19,22 +19,25 @@ const maxHP = 10;
 let playerHP = maxHP;
 let enemyHP = maxHP;
 
-const centerX = app.screen.width / 2;
-const centerY = app.screen.height / 2;
+// Рассчитаем некие константы для позиционирования.
+// При необходимости можно делать пропорционально размеру экрана.
+const playerRadius = 30; // радиус круга для игрока
+const enemyHeight = 60;  // высота треугольника (примерно)
+const HP_BAR_WIDTH = 100; // сделаем чуть короче, чем было 150, чтобы лучше влезало на телефон
 
 //-----------------------------------------------------
-// 3. Фон (солнце, деревья и т.п.)
+// 3. Фон (небо, земля, дорожка, солнце, деревья)
 //-----------------------------------------------------
 const background = new PIXI.Graphics();
-// Небо
-background.beginFill(0x87ceeb);
+background.beginFill(0x87ceeb); // небо
 background.drawRect(0, 0, app.screen.width, app.screen.height / 2);
 background.endFill();
 
-// Земля
+// земля
 background.beginFill(0x654321);
 background.drawRect(0, app.screen.height / 2, app.screen.width, app.screen.height / 2);
 background.endFill();
+
 app.stage.addChild(background);
 
 // Дорожка
@@ -49,16 +52,16 @@ path.drawRect(
 path.endFill();
 app.stage.addChild(path);
 
-// Солнце
+// Солнце (простое жёлтое кругляшко)
 const sun = new PIXI.Graphics();
 sun.beginFill(0xffff00);
 sun.drawCircle(0, 0, 40);
 sun.endFill();
-sun.x = app.screen.width - 100;
-sun.y = 100;
+sun.x = app.screen.width - 80;
+sun.y = 80;
 app.stage.addChild(sun);
 
-// Деревья
+// Несколько деревьев
 for (let i = 0; i < 3; i++) {
   const tree = new PIXI.Graphics();
   // ствол
@@ -80,32 +83,39 @@ for (let i = 0; i < 3; i++) {
 //-----------------------------------------------------
 const player = new PIXI.Graphics();
 player.beginFill(0x0000ff);
-player.drawCircle(0, 0, 30);
+player.drawCircle(0, 0, playerRadius);
 player.endFill();
-player.x = app.screen.width * 0.2;
-player.y = app.screen.height * 0.5;
+// Разместим игрока примерно в 30% по ширине
+player.x = app.screen.width * 0.3;
+player.y = app.screen.height * 0.55;
 app.stage.addChild(player);
 
 const enemy = new PIXI.Graphics();
 enemy.beginFill(0xff0000);
-enemy.drawPolygon([0, -30, 30, 30, -30, 30]);
+enemy.drawPolygon([
+  0, -enemyHeight/2,
+  enemyHeight/2, enemyHeight/2,
+  -enemyHeight/2, enemyHeight/2
+]);
 enemy.endFill();
-enemy.x = app.screen.width * 0.8;
-enemy.y = app.screen.height * 0.5;
+// Разместим врага в 70% по ширине
+enemy.x = app.screen.width * 0.7;
+enemy.y = app.screen.height * 0.55;
 app.stage.addChild(enemy);
 
-// Исходные позиции
+// Исходные позиции (для анимации подхода/возврата)
 const playerStartX = player.x;
 const enemyStartX = enemy.x;
 
-// Точка встречи в центре
-const meetingXPlayer = centerX - 60;
-const meetingXEnemy  = centerX + 60;
+// Точка "встречи"
+const meetingXPlayer = app.screen.width * 0.5 - 60;
+const meetingXEnemy  = app.screen.width * 0.5 + 60;
 
 //-----------------------------------------------------
-// 5. Полоски здоровья
+// 5. Полоски здоровья (теперь над головами)
 //-----------------------------------------------------
-function createHPBar(x, y, width, height, maxValue) {
+
+function createHPBar(width, height, maxValue) {
   const container = new PIXI.Container();
 
   const border = new PIXI.Graphics();
@@ -131,89 +141,57 @@ function createHPBar(x, y, width, height, maxValue) {
   text.y = height / 2;
   container.addChild(text);
 
-  container.x = x;
-  container.y = y;
-
   return { container, bar, text, maxValue };
 }
 
-const playerHPBar = createHPBar(50, 50, 150, 20, maxHP);
+const playerHPBar = createHPBar(HP_BAR_WIDTH, 16, maxHP);
 app.stage.addChild(playerHPBar.container);
 
-const enemyHPBar = createHPBar(app.screen.width - 200, 50, 150, 20, maxHP);
+const enemyHPBar = createHPBar(HP_BAR_WIDTH, 16, maxHP);
 app.stage.addChild(enemyHPBar.container);
 
+// Функция для обновления HP бара
 function updateHPBar(barObj, currentHP) {
   const ratio = currentHP / barObj.maxValue;
-  barObj.bar.width = 150 * ratio;
+  barObj.bar.width = HP_BAR_WIDTH * ratio;
   barObj.text.text = `${currentHP}/${barObj.maxValue}`;
 }
 
-//-----------------------------------------------------
-// 6. Текст "Победа" / "Поражение"
-//-----------------------------------------------------
-const resultText = new PIXI.Text("", {
-  fill: '#ffffff',
-  fontSize: 48,
-  fontWeight: 'bold',
-  align: 'center'
-});
-resultText.anchor.set(0.5);
-resultText.x = centerX;
-resultText.y = centerY - 100;
-resultText.zIndex = 999;
-app.stage.addChild(resultText);
-
-function showResult(msg) {
-  resultText.text = msg;
-  // Покажем кнопку "NEW GAME"
-  newGameButton.visible = true;
+// Позиционирование HP-баров над головами
+function positionHPBars() {
+  // Игрок: бар над кругом (с учётом радиуса)
+  playerHPBar.container.x = player.x - HP_BAR_WIDTH / 2; 
+  playerHPBar.container.y = player.y - (playerRadius + 10 + 16); 
+  // враг: бар над треугольником (с учётом половины высоты)
+  enemyHPBar.container.x = enemy.x - HP_BAR_WIDTH / 2;
+  enemyHPBar.container.y = enemy.y - (enemyHeight / 2 + 10 + 16);
 }
 
-function hideResultAndButton() {
-  resultText.text = "";
-  newGameButton.visible = false;
-}
+// Вызываем при каждом кадре или после изменения размеров
+positionHPBars();
 
 //-----------------------------------------------------
-// 7. Кнопка "NEW GAME" (изначально скрыта)
+// 6. Интерфейс: блок / атака (вверху), кнопка Fight (внизу)
 //-----------------------------------------------------
-const newGameButton = createButton("NEW GAME", 0, 120, 40);
-newGameButton.zIndex = 999;
-newGameButton.visible = false;
-app.stage.addChild(newGameButton);
 
-// Ставим под результатом
-newGameButton.x = centerX - 60;
-newGameButton.y = resultText.y + 60;
-
-newGameButton.interactive = true;
-newGameButton.buttonMode = true;
-newGameButton.on("pointerdown", () => {
-  restartGame();
-});
-
-//-----------------------------------------------------
-// 8. UI: выбор блока и атаки + кнопка FIGHT
-//-----------------------------------------------------
+// Список вариантов
 const blockOptions = ["head", "body", "groin"];
 const attackOptions = ["head", "body", "groin"];
 
 let selectedBlock = null;
 let selectedAttack = null;
 
+// Создаём контейнер для UI (чтобы единообразно сдвигать)
 const uiContainer = new PIXI.Container();
-uiContainer.x = 50;
-uiContainer.y = 150;
 app.stage.addChild(uiContainer);
 
-const blockContainer = new PIXI.Container();
-blockContainer.y = 0;
-uiContainer.addChild(blockContainer);
+// Размещаем его у верхнего левого угла + небольшой отступ
+uiContainer.x = 10;
+uiContainer.y = 10;
 
-const attackContainer = new PIXI.Container();
-attackContainer.y = 150;
-uiContainer.addChild(attackContainer);
+// ---- БЛОК "Block" ----
+const blockContainer = new PIXI.Container();
+uiContainer.addChild(blockContainer);
 
 const labelStyle = new PIXI.TextStyle({
   fill: '#000000',
@@ -221,15 +199,9 @@ const labelStyle = new PIXI.TextStyle({
   fontWeight: 'bold',
 });
 const blockLabel = new PIXI.Text("Block:", labelStyle);
-blockLabel.y = -25;
 blockContainer.addChild(blockLabel);
 
-const attackLabel = new PIXI.Text("Attack:", labelStyle);
-attackLabel.y = -25;
-attackContainer.addChild(attackLabel);
-
-// Функция-шаблон для кнопок
-function createButton(label, index, width = 80, height = 30) {
+function createButton(label, width = 80, height = 30) {
   const button = new PIXI.Container();
 
   const bg = new PIXI.Graphics();
@@ -251,14 +223,14 @@ function createButton(label, index, width = 80, height = 30) {
 
   button.bg = bg;
   button.txt = text;
-  button.y = index * (height + 10);
 
   return button;
 }
 
-// --- Кнопки BLOCK ---
+// Разместим кнопки блока вертикально под лейблом
 blockOptions.forEach((option, i) => {
-  const btn = createButton(option, i);
+  const btn = createButton(option);
+  btn.y = 30 + i * 40; 
   blockContainer.addChild(btn);
 
   btn.interactive = true;
@@ -273,7 +245,7 @@ function updateBlockButtons() {
   blockContainer.children.forEach(child => {
     if (!child.txt) return;
     if (child.txt.text === selectedBlock) {
-      child.bg.tint = 0x55AA55; 
+      child.bg.tint = 0x55AA55;
       child.bg.alpha = 1.0;
     } else {
       child.bg.tint = 0xffffff;
@@ -281,10 +253,20 @@ function updateBlockButtons() {
     }
   });
 }
+updateBlockButtons();
 
-// --- Кнопки ATTACK ---
+// ---- БЛОК "Attack" ----
+// Разместим его справа от Block (с небольшим отступом)
+const attackContainer = new PIXI.Container();
+attackContainer.x = 120; // +80 ширина кнопок + небольшой отступ
+uiContainer.addChild(attackContainer);
+
+const attackLabel = new PIXI.Text("Attack:", labelStyle);
+attackContainer.addChild(attackLabel);
+
 attackOptions.forEach((option, i) => {
-  const btn = createButton(option, i);
+  const btn = createButton(option);
+  btn.y = 30 + i * 40;
   attackContainer.addChild(btn);
 
   btn.interactive = true;
@@ -307,15 +289,14 @@ function updateAttackButtons() {
     }
   });
 }
-
-updateBlockButtons();
 updateAttackButtons();
 
-// --- Кнопка FIGHT ---
-const fightButton = createButton("FIGHT", 0, 100, 40);
-fightButton.x = 0;
-fightButton.y = 320;
-uiContainer.addChild(fightButton);
+// ---- КНОПКА FIGHT (внизу слева) ----
+const fightButton = createButton("FIGHT", 100, 40);
+fightButton.x = 20;
+fightButton.y = app.screen.height - 60; 
+// Чтобы реагировать при изменении размеров экрана, можно обновлять в ресайзе
+app.stage.addChild(fightButton);
 
 fightButton.interactive = true;
 fightButton.buttonMode = true;
@@ -324,43 +305,15 @@ fightButton.on("pointerdown", () => {
 });
 
 //-----------------------------------------------------
-// 9. Логика перезапуска
-//-----------------------------------------------------
-function restartGame() {
-  hideResultAndButton();
-
-  // Сбрасываем HP
-  playerHP = maxHP;
-  enemyHP = maxHP;
-  updateHPBar(playerHPBar, playerHP);
-  updateHPBar(enemyHPBar, enemyHP);
-
-  // Возвращаем спрайты на исходные позиции
-  player.x = playerStartX;
-  enemy.x  = enemyStartX;
-
-  // Сбрасываем выбранные блок/атаку
-  selectedBlock = null;
-  selectedAttack = null;
-  updateBlockButtons();
-  updateAttackButtons();
-
-  // Сбрасываем флаги анимации
-  isFighting = false;
-  fightPhase = 0;
-  fightFrame = 0;
-}
-
-//-----------------------------------------------------
-// 10. Анимация столкновения + нанесение урона
+// 7. Анимация + логика боя (как прежде)
 //-----------------------------------------------------
 let isFighting = false;
 let fightPhase = 0;
 let fightFrame = 0;
 
-const approachFrames = 30;  
-const collisionFrames = 10; 
-const retreatFrames = 30;  
+const approachFrames = 30;
+const collisionFrames = 10;
+const retreatFrames = 30;
 
 function startFightAnimation() {
   if (isFighting) return;
@@ -371,12 +324,56 @@ function startFightAnimation() {
   isFighting = true;
   fightPhase = 0;
   fightFrame = 0;
-
-  // Скрываем результат (если вдруг был)
-  hideResultAndButton();
 }
 
+// Пример функции нанесения урона
+function getDamage(attackPart) {
+  switch (attackPart) {
+    case "head":  return 3;
+    case "groin": return 2;
+    default:      return 1; 
+  }
+}
+
+function doDamagePhase() {
+  // Враг рандомно выбирает
+  const blockOpts = ["head", "body", "groin"];
+  const attackOpts = ["head", "body", "groin"];
+  const enemyBlock = blockOpts[Math.floor(Math.random() * blockOpts.length)];
+  const enemyAttack = attackOpts[Math.floor(Math.random() * attackOpts.length)];
+
+  console.log(`Игрок блокирует: ${selectedBlock}, атакует: ${selectedAttack}`);
+  console.log(`Враг блокирует: ${enemyBlock}, атакует: ${enemyAttack}`);
+
+  // Наш удар
+  if (enemyBlock !== selectedAttack) {
+    enemyHP -= getDamage(selectedAttack);
+    if (enemyHP < 0) enemyHP = 0;
+    updateHPBar(enemyHPBar, enemyHP);
+  }
+  if (enemyHP <= 0) {
+    console.log("Вы победили!");
+    return;
+  }
+
+  // Вражеский ответ
+  if (selectedBlock !== enemyAttack) {
+    playerHP -= getDamage(enemyAttack);
+    if (playerHP < 0) playerHP = 0;
+    updateHPBar(playerHPBar, playerHP);
+  }
+  if (playerHP <= 0) {
+    console.log("Вы проиграли...");
+  }
+}
+
+//-----------------------------------------------------
+// 8. Игровой цикл (ticker)
+//-----------------------------------------------------
 app.ticker.add(() => {
+  // Обновим расположение HP-бара, если персонажей анимируют
+  positionHPBars();
+
   if (!isFighting) return;
 
   fightFrame++;
@@ -388,22 +385,22 @@ app.ticker.add(() => {
     enemy.x  = enemyStartX  + (meetingXEnemy  - enemyStartX)  * alpha;
 
     if (fightFrame >= approachFrames) {
-      fightPhase = 1; 
+      fightPhase = 1;
       fightFrame = 0;
     }
 
   } else if (fightPhase === 1) {
-    // Фаза коллизии: на 1-м кадре наносим урон
+    // Коллизия
     if (fightFrame === 1) {
       doDamagePhase();
     }
     if (fightFrame >= collisionFrames) {
-      fightPhase = 2; 
+      fightPhase = 2;
       fightFrame = 0;
     }
 
   } else if (fightPhase === 2) {
-    // Фаза возврата
+    // Возврат
     const alpha = fightFrame / retreatFrames;
     player.x = meetingXPlayer + (playerStartX - meetingXPlayer) * alpha;
     enemy.x  = meetingXEnemy  + (enemyStartX  - meetingXEnemy)  * alpha;
@@ -417,47 +414,11 @@ app.ticker.add(() => {
 });
 
 //-----------------------------------------------------
-// Логика нанесения урона: фиксированная (не рандом!)
+// 9. (Необязательно) Реакция на resize (адаптив)
 //-----------------------------------------------------
-function doDamagePhase() {
-  // Враг продолжает случайно выбирать, куда бить и куда блокировать
-  // (можете тоже убрать, если хотите)
-  const enemyBlock = blockOptions[Math.floor(Math.random() * blockOptions.length)];
-  const enemyAttack = attackOptions[Math.floor(Math.random() * attackOptions.length)];
-
-  console.log(`Игрок блокирует: ${selectedBlock}, атакует: ${selectedAttack}`);
-  console.log(`Враг блокирует: ${enemyBlock}, атакует: ${enemyAttack}`);
-
-  // 1) Игрок бьёт первым
-  if (enemyBlock !== selectedAttack) {
-    // Здесь не рандом, а жёсткая логика: head=3, groin=2, body=1
-    enemyHP -= getDamage(selectedAttack);
-    if (enemyHP < 0) enemyHP = 0;
-    updateHPBar(enemyHPBar, enemyHP);
-  }
-  if (enemyHP <= 0) {
-    showResult("Вы победили!");
-    return;
-  }
-
-  // 2) Враг бьёт
-  if (selectedBlock !== enemyAttack) {
-    playerHP -= getDamage(enemyAttack);
-    if (playerHP < 0) playerHP = 0;
-    updateHPBar(playerHPBar, playerHP);
-  }
-  if (playerHP <= 0) {
-    showResult("Вы проиграли...");
-  }
-}
-
-// Собственно, нерандомная функция урона.
-// Все значения фиксированные, никаких Math.random.
-function getDamage(attackPart) {
-  switch (attackPart) {
-    case "head":  return 3;
-    case "groin": return 2;
-    // По умолчанию => "body"
-    default:      return 1;
-  }
-}
+window.addEventListener("resize", () => {
+  // При желании можно перенастраивать расположение UI
+  fightButton.y = app.screen.height - 60;
+  // И, например, перестраивать meetingXPlayer/enemy, etc.
+  // Или просто пересчитывать positionHPBars().
+});
