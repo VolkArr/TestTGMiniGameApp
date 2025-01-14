@@ -12,6 +12,15 @@ document.body.appendChild(app.view);
 // Разрешим сортировку по Z, чтобы текст/GUI рисовались поверх
 app.stage.sortableChildren = true;
 
+const player = new PIXI.Graphics();
+const enemy = new PIXI.Graphics();
+const uiContainer = new PIXI.Container();
+const blockContainer = new PIXI.Container();
+uiContainer.addChild(blockContainer);
+const attackContainer = new PIXI.Container();
+uiContainer.addChild(attackContainer);
+const inventoryUI = new PIXI.Container();
+
 
 //-----------------------------------------------------
 // 2. Параметры игры
@@ -19,13 +28,24 @@ app.stage.sortableChildren = true;
 let maxHP = 10;
 let playerHP = maxHP;
 let playerScore = 0; // Очки игрока
+// Исходная позиция
+let playerStartX = app.screen.width * 0.3;
+let meetingXPlayer = app.screen.width * 0.5 - 60;
+
+
+
+
 
 let isInterfaceLocked = false; // Флаг блокировки интерфейса
+let isGameRunning = false;
 
 // Для врагов сделаем отдельно текущие показатели
 let enemyHP = 10;              // HP у текущего врага
 let enemyMaxHP = 10;           // Чтобы обновлять шкалу
 let currentFloor = 1;          // Этаж "башни"
+// Исходная позиция
+let enemyStartX = app.screen.width * 0.7;
+let meetingXEnemy  = app.screen.width * 0.5 + 60; 
 
 // Размеры/позиции
 const playerRadius = 30; 
@@ -41,147 +61,224 @@ let attackMod = 0; // Увеличивает урон
 let armorMod = 0;  // Уменьшает получаемый урон
 let healthBonus = 0; // Дополнительное максимальное здоровье
 
+
+
+const blockOptions = ["head", "body", "groin"];
+const attackOptions = ["head", "body", "groin"];
+
+let selectedBlock = null;
+let selectedAttack = null;
+
+
 //-----------------------------------------------------
 // 3. Фон (небо, земля, дорожка, солнце, деревья)
 //-----------------------------------------------------
-const background = new PIXI.Graphics();
-background.beginFill(0x87ceeb); 
-background.drawRect(0, 0, app.screen.width, app.screen.height / 2);
-background.endFill();
 
-background.beginFill(0x654321);
-background.drawRect(
-  0, 
-  app.screen.height / 2, 
-  app.screen.width, 
-  app.screen.height / 2
-);
-background.endFill();
-app.stage.addChild(background);
 
-const path = new PIXI.Graphics();
-path.beginFill(0x888888);
-path.drawRect(
-  app.screen.width * 0.2,
-  app.screen.height / 2,
-  app.screen.width * 0.6,
-  app.screen.height / 2
-);
-path.endFill();
-app.stage.addChild(path);
 
-// Солнце
-const sun = new PIXI.Graphics();
-sun.beginFill(0xffff00);
-sun.drawCircle(0, 0, 40);
-sun.endFill();
-sun.x = app.screen.width - 80;
-sun.y = 80;
-app.stage.addChild(sun);
 
-// Деревья (пример)
-for (let i = 0; i < 3; i++) {
-  const tree = new PIXI.Graphics();
-  // ствол
-  tree.beginFill(0x8B4513);
-  tree.drawRect(0, 0, 20, 60);
-  tree.endFill();
-  // крона
-  tree.beginFill(0x228B22);
-  tree.drawCircle(10, -10, 30);
-  tree.endFill();
+function createGameBackground(){
+  const background = new PIXI.Graphics();
+  background.beginFill(0x87ceeb); 
+  background.drawRect(0, 0, app.screen.width, app.screen.height / 2);
+  background.endFill();
 
-  tree.x = 100 + i * 250;
-  tree.y = app.screen.height / 2 - 60;
-  app.stage.addChild(tree);
+  background.beginFill(0x654321);
+  background.drawRect(
+    0, 
+    app.screen.height / 2, 
+    app.screen.width, 
+    app.screen.height / 2
+  );
+  background.endFill();
+  app.stage.addChild(background);
+
+  const path = new PIXI.Graphics();
+  path.beginFill(0x888888);
+  path.drawRect(
+    app.screen.width * 0.2,
+    app.screen.height / 2,
+    app.screen.width * 0.6,
+    app.screen.height / 2
+  );
+  path.endFill();
+  app.stage.addChild(path);
+
+  // Солнце
+  const sun = new PIXI.Graphics();
+  sun.beginFill(0xffff00);
+  sun.drawCircle(0, 0, 40);
+  sun.endFill();
+  sun.x = app.screen.width - 80;
+  sun.y = 80;
+  app.stage.addChild(sun);
+
+  // Деревья (пример)
+  for (let i = 0; i < 3; i++) {
+    const tree = new PIXI.Graphics();
+    // ствол
+    tree.beginFill(0x8B4513);
+    tree.drawRect(0, 0, 20, 60);
+    tree.endFill();
+    // крона
+    tree.beginFill(0x228B22);
+    tree.drawCircle(10, -10, 30);
+    tree.endFill();
+
+    tree.x = 100 + i * 250;
+    tree.y = app.screen.height / 2 - 60;
+    app.stage.addChild(tree);
+  }
 }
 
-// //-----------------------------------------------------
-// // 1. Создаём контейнер для катсцен
-// //-----------------------------------------------------
-// let currentSceneIndex = 0;
-// const scenes = [
-//     { image: "scene1.png", text: "Синий шарик идет по дороге." },
-//     { image: "scene2.png", text: "Синий шарик видит деревню в огне." },
-//     { image: "scene3.png", text: "Синий шарик бежит на помощь." },
-//     { image: "scene4.png", text: "Синий шарик сталкивается с врагом." }
-// ];
 
-// const cutsceneContainer = new PIXI.Container();
-// cutsceneContainer.name = "cutsceneContainer";
-// app.stage.addChild(cutsceneContainer);
-
-// // Фон для сцены
-// const sceneBackground = new PIXI.Graphics();
-// sceneBackground.beginFill(0x000000);
-// sceneBackground.drawRect(0, 0, app.screen.width, app.screen.height * 0.6);
-// sceneBackground.endFill();
-// cutsceneContainer.addChild(sceneBackground);
-
-// // Место для текста
-// const textBackground = new PIXI.Graphics();
-// textBackground.beginFill(0x8B4513); // Коричневый
-// textBackground.drawRect(0, app.screen.height * 0.6, app.screen.width, app.screen.height * 0.4);
-// textBackground.endFill();
-// cutsceneContainer.addChild(textBackground);
-
-// // Текстовое поле
-// const textStyle = new PIXI.TextStyle({
-//     fill: "#FFFFFF",
-//     fontSize: 20,
-//     wordWrap: true,
-//     wordWrapWidth: app.screen.width - 20
-// });
-// const textField = new PIXI.Text("", textStyle);
-// textField.x = 10;
-// textField.y = app.screen.height * 0.6 + 10;
-// cutsceneContainer.addChild(textField);
-
-// // Кнопка "Дальше"
-// const nextButton = createButton("Дальше", 100, 40);
-// nextButton.x = app.screen.width - 120;
-// nextButton.y = app.screen.height - 50;
-// nextButton.on("pointerdown", () => {
-//     showNextScene();
-// });
-// cutsceneContainer.addChild(nextButton);
+function createPlayerAndEnemies(){
+  
+  player.beginFill(0x0000ff);
+  player.drawCircle(0, 0, playerRadius);
+  player.endFill();
+  player.x = app.screen.width * 0.3;
+  player.y = app.screen.height * 0.55;
+  app.stage.addChild(player);
 
 
-// function startCutscene() {
-//   currentSceneIndex = 0;
-//   cutsceneContainer.visible = true;
-//   showNextScene();
-// }
+  enemy.beginFill(0xff0000);
+  enemy.drawPolygon([
+    0, -enemyHeight/2,
+    enemyHeight/2, enemyHeight/2,
+    -enemyHeight/2, enemyHeight/2
+  ]);
+  enemy.endFill();
+  enemy.x = app.screen.width * 0.7;
+  enemy.y = app.screen.height * 0.55;
+  app.stage.addChild(enemy);
 
+  app.stage.addChild(playerHPBar.container);
+  app.stage.addChild(enemyHPBar.container);
+
+  positionHPBars();
+
+}
 //-----------------------------------------------------
-// 4. Персонажи: наш (круг) и враг (треугольник)
+// 4. Логика катсцен
 //-----------------------------------------------------
-const player = new PIXI.Graphics();
-player.beginFill(0x0000ff);
-player.drawCircle(0, 0, playerRadius);
-player.endFill();
-player.x = app.screen.width * 0.3;
-player.y = app.screen.height * 0.55;
-app.stage.addChild(player);
+let currentSceneIndex = 0;
+const scenes = [
+    { image: "scene1.png", text: "Синий шарик идет по дороге." },
+    { image: "scene2.png", text: "Синий шарик видит деревню в огне." },
+    { image: "scene3.png", text: "Синий шарик бежит на помощь." },
+    { image: "scene4.png", text: "Синий шарик сталкивается с врагом." }
+];
 
-const enemy = new PIXI.Graphics();
-enemy.beginFill(0xff0000);
-enemy.drawPolygon([
-  0, -enemyHeight/2,
-  enemyHeight/2, enemyHeight/2,
-  -enemyHeight/2, enemyHeight/2
-]);
-enemy.endFill();
-enemy.x = app.screen.width * 0.7;
-enemy.y = app.screen.height * 0.55;
-app.stage.addChild(enemy);
+const cutsceneContainer = new PIXI.Container();
+cutsceneContainer.name = "cutsceneContainer";
+app.stage.addChild(cutsceneContainer);
+cutsceneContainer.visible = false; // Скрыто по умолчанию
 
-// Исходные позиции (анимация)
-const playerStartX = player.x;
-let enemyStartX = enemy.x;
+// Фон для сцены
+const sceneBackground = new PIXI.Graphics();
+sceneBackground.beginFill(0x000000);
+sceneBackground.drawRect(0, 0, app.screen.width, app.screen.height * 0.6);
+sceneBackground.endFill();
+cutsceneContainer.addChild(sceneBackground);
 
-const meetingXPlayer = app.screen.width * 0.5 - 60;
-let meetingXEnemy  = app.screen.width * 0.5 + 60; 
+// Место для текста
+const textBackground = new PIXI.Graphics();
+textBackground.beginFill(0x4B2A13); // Тёмно-коричневый цвет
+textBackground.drawRect(0, app.screen.height * 0.6, app.screen.width, app.screen.height * 0.4);
+textBackground.endFill();
+cutsceneContainer.addChild(textBackground);
+
+// Текстовое поле
+const textStyle = new PIXI.TextStyle({
+  fill: "#FFFFFF",
+  fontSize: 36, // Уменьшите или увеличьте, если текст слишком большой или маленький
+  wordWrap: true,
+  wordWrapWidth: app.screen.width - 40
+});
+
+const textField = new PIXI.Text("", textStyle);
+textField.style = textStyle;
+textField.x = 20;
+textField.y = app.screen.height * 0.6 + 20;
+textField.visible = true;
+cutsceneContainer.addChild(textField);
+
+// Кнопка "Дальше"
+const nextButton = createButton("Дальше", 100, 40);
+nextButton.interactive = true;
+nextButton.visible = true;
+nextButton.x = app.screen.width - 120;
+nextButton.y = app.screen.height - 50;
+nextButton.on("pointerdown", () => {
+  console.log("Кнопка 'Дальше' нажата");
+  showNextScene();
+});
+cutsceneContainer.addChild(nextButton);
+
+// Функция показа следующей сцены
+function showNextScene() {
+  console.log(`Текущая сцена: ${currentSceneIndex}`);
+  if (currentSceneIndex >= scenes.length) {
+      console.log("Катсцена завершена, начинаем игру");
+      cutsceneContainer.visible = false;
+      startGame(); // Переход к игре
+      return;
+  }
+
+  const scene = scenes[currentSceneIndex];
+  
+  console.log(`cutsceneContainer.visible: ${cutsceneContainer.visible}`);
+  console.log(`textField.visible: ${textField.visible}`);
+  console.log(`textBackground.visible: ${textBackground.visible}`);
+  loadScene(scene.image, scene.text);
+  currentSceneIndex++;
+}
+
+
+
+function loadScene(imagePath, text) {
+  console.log(`Отображаемый текст: ${text}`);
+  
+  // Удаляем только изображение сцены, оставляя textField и textBackground
+  while (cutsceneContainer.children.length > 3) {
+      cutsceneContainer.removeChildAt(1); // Удаляем старое изображение
+  }
+
+  const sceneImage = PIXI.Sprite.from(imagePath);
+  sceneImage.width = app.screen.width;
+  sceneImage.height = app.screen.height * 0.6;
+  cutsceneContainer.addChildAt(sceneImage, 1);
+
+  // Обновляем фон текста (перерисовка)
+  textBackground.clear();
+  textBackground.beginFill(0x8B4513); // Коричневый цвет
+  textBackground.drawRect(0, app.screen.height * 0.6, app.screen.width, app.screen.height * 0.4);
+  textBackground.endFill();
+
+  // Устанавливаем текст и сбрасываем предыдущее содержимое
+  textField.text = "";
+  let charIndex = 0;
+
+  const typingInterval = setInterval(() => {
+      if (charIndex < text.length) {
+          textField.text += text[charIndex];
+          charIndex++;
+      } else {
+          clearInterval(typingInterval); // Останавливаем "печать" текста
+      }
+  }, 50);
+}
+
+
+// Запуск катсцены
+function startCutscene() {
+    currentSceneIndex = 0;
+    cutsceneContainer.visible = true;
+    showNextScene();
+}
+
+
 
 //-----------------------------------------------------
 // 5. Полоски здоровья: над головами (игрока и врага)
@@ -215,13 +312,13 @@ function createHPBar(width, height, maxValue) {
   return { container, bar, text, maxValue };
 }
 
-// Игрок
-const playerHPBar = createHPBar(HP_BAR_WIDTH, 16, maxHP);
-app.stage.addChild(playerHPBar.container);
+  // Игрок
+  let playerHPBar = createHPBar(HP_BAR_WIDTH, 16, maxHP);
+  
+  // Враг
+  let enemyHPBar = createHPBar(HP_BAR_WIDTH, 16, enemyMaxHP);
 
-// Враг
-let enemyHPBar = createHPBar(HP_BAR_WIDTH, 16, enemyMaxHP);
-app.stage.addChild(enemyHPBar.container);
+
 
 function updateHPBar(barObj, currentHP) {
   const ratio = currentHP / barObj.maxValue;
@@ -243,33 +340,15 @@ function positionHPBars() {
 // Изначально
 updateHPBar(playerHPBar, playerHP);
 updateHPBar(enemyHPBar, enemyHP);
-positionHPBars();
+
 
 //-----------------------------------------------------
 // 6. Интерфейс: вверху (Block / Attack), внизу кнопка FIGHT
 //-----------------------------------------------------
-const blockOptions = ["head", "body", "groin"];
-const attackOptions = ["head", "body", "groin"];
 
-let selectedBlock = null;
-let selectedAttack = null;
 
-const uiContainer = new PIXI.Container();
-uiContainer.x = 10;
-uiContainer.y = 10;
-app.stage.addChild(uiContainer);
 
-// Блоки (Block)
-const blockContainer = new PIXI.Container();
-uiContainer.addChild(blockContainer);
 
-const labelStyle = new PIXI.TextStyle({
-  fill: '#000000',
-  fontSize: 16,
-  fontWeight: 'bold',
-});
-const blockLabel = new PIXI.Text("Block:", labelStyle);
-blockContainer.addChild(blockLabel);
 
 // Функция создания кнопки
 function createButton(label, width = 80, height = 30) {
@@ -298,19 +377,132 @@ function createButton(label, width = 80, height = 30) {
   return button;
 }
 
+
+function createBtnUI(){
+  
+  uiContainer.x = 10;
+  uiContainer.y = 10;
+  app.stage.addChild(uiContainer);
+
+  // Блоки (Block)
+
+
+  const labelStyle = new PIXI.TextStyle({
+    fill: '#000000',
+    fontSize: 16,
+    fontWeight: 'bold',
+  });
+  const blockLabel = new PIXI.Text("Block:", labelStyle);
+  blockContainer.addChild(blockLabel);
 // Кнопки блока
-blockOptions.forEach((option, i) => {
+  blockOptions.forEach((option, i) => {
+    const btn = createButton(option);
+    btn.y = 30 + i * 40;
+    blockContainer.addChild(btn);
+
+    btn.interactive = true;
+    btn.buttonMode = true;
+    btn.on("pointerdown", () => {
+      selectedBlock = option;
+      updateBlockButtons();
+    });
+  });
+
+  // Кнопка FIGHT (внизу слева)
+  const fightButton = createButton("FIGHT", 100, 40);
+  updateBlockButtons();
+
+  // Атаки (Attack)
+
+attackContainer.x = 120;
+
+
+const attackLabel = new PIXI.Text("Attack:", labelStyle);
+attackContainer.addChild(attackLabel);
+
+attackOptions.forEach((option, i) => {
   const btn = createButton(option);
   btn.y = 30 + i * 40;
-  blockContainer.addChild(btn);
+  attackContainer.addChild(btn);
 
   btn.interactive = true;
   btn.buttonMode = true;
   btn.on("pointerdown", () => {
-    selectedBlock = option;
-    updateBlockButtons();
+      selectedAttack = option;
+      updateAttackButtons();
+    });
   });
-});
+
+  updateAttackButtons();
+
+
+
+  fightButton.x = 20;
+  fightButton.y = app.screen.height - 60;
+  app.stage.addChild(fightButton);
+
+  fightButton.interactive = true;
+  fightButton.buttonMode = true;
+  fightButton.on("pointerdown", () => {
+    if (isInterfaceLocked) return;
+    startFightAnimation();
+  });
+
+  //-----------------------------------------------------
+  // Кнопка инвентаря (внизу справа)
+  //-----------------------------------------------------
+  const inventoryButton = new PIXI.Container();
+  const inventoryIcon = PIXI.Sprite.from('./inventory_icon.png'); 
+  inventoryIcon.width = 50;
+  inventoryIcon.height = 50;
+  inventoryButton.addChild(inventoryIcon);
+
+  inventoryButton.x = app.screen.width - 70;
+  inventoryButton.y = app.screen.height - 70;
+  app.stage.addChild(inventoryButton);
+
+  inventoryButton.interactive = true;
+  inventoryButton.buttonMode = true;
+
+  // Интерфейс инвентаря
+ 
+  inventoryUI.visible = false; // По умолчанию скрыт
+  inventoryUI.x = app.screen.width / 2 - 100;
+  inventoryUI.y = app.screen.height / 2 - 100;
+  app.stage.addChild(inventoryUI);
+
+  // Создаём ячейки инвентаря
+for (let i = 0; i < maxInventorySlots; i++) {
+  const slot = new PIXI.Container();
+
+  // Фон слота
+  const bg = new PIXI.Graphics();
+  bg.lineStyle(2, 0xFFFFFF);
+  bg.beginFill(0x333333);
+  bg.drawRect(0, 0, 50, 50);
+  bg.endFill();
+  slot.addChild(bg);
+  slot.bg = bg;
+
+  // Слой для иконки
+  const iconLayer = new PIXI.Container();
+  iconLayer.name = "iconLayer"; // Удобное имя для поиска в updateInventoryUI
+  slot.addChild(iconLayer);
+
+  slot.x = (i % 4) * 55; // 4 слота в ряд
+  slot.y = Math.floor(i / 4) * 55;
+  inventoryUI.addChild(slot);
+}
+
+  // Кнопка для открытия/закрытия инвентаря
+  inventoryButton.on("pointerdown", () => {
+      inventoryUI.visible = !inventoryUI.visible; // Переключение видимости
+  });
+
+
+}
+
+
 
 function updateBlockButtons() {
   blockContainer.children.forEach(child => {
@@ -324,28 +516,9 @@ function updateBlockButtons() {
     }
   });
 }
-updateBlockButtons();
 
-// Атаки (Attack)
-const attackContainer = new PIXI.Container();
-attackContainer.x = 120; 
-uiContainer.addChild(attackContainer);
 
-const attackLabel = new PIXI.Text("Attack:", labelStyle);
-attackContainer.addChild(attackLabel);
 
-attackOptions.forEach((option, i) => {
-  const btn = createButton(option);
-  btn.y = 30 + i * 40;
-  attackContainer.addChild(btn);
-
-  btn.interactive = true;
-  btn.buttonMode = true;
-  btn.on("pointerdown", () => {
-    selectedAttack = option;
-    updateAttackButtons();
-  });
-});
 
 function updateAttackButtons() {
   attackContainer.children.forEach(child => {
@@ -359,64 +532,12 @@ function updateAttackButtons() {
     }
   });
 }
-updateAttackButtons();
 
-// Кнопка FIGHT (внизу слева)
-const fightButton = createButton("FIGHT", 100, 40);
-fightButton.x = 20;
-fightButton.y = app.screen.height - 60;
-app.stage.addChild(fightButton);
 
-fightButton.interactive = true;
-fightButton.buttonMode = true;
-fightButton.on("pointerdown", () => {
-  if (isInterfaceLocked) return;
-  startFightAnimation();
-});
 
-//-----------------------------------------------------
-// Кнопка инвентаря (внизу справа)
-//-----------------------------------------------------
-const inventoryButton = new PIXI.Container();
-const inventoryIcon = PIXI.Sprite.from('./inventory_icon.png'); // Замените на путь к вашей иконке
-inventoryIcon.width = 50;
-inventoryIcon.height = 50;
-inventoryButton.addChild(inventoryIcon);
 
-inventoryButton.x = app.screen.width - 70;
-inventoryButton.y = app.screen.height - 70;
-app.stage.addChild(inventoryButton);
 
-inventoryButton.interactive = true;
-inventoryButton.buttonMode = true;
 
-// Интерфейс инвентаря
-const inventoryUI = new PIXI.Container();
-inventoryUI.visible = false; // По умолчанию скрыт
-inventoryUI.x = app.screen.width / 2 - 100;
-inventoryUI.y = app.screen.height / 2 - 100;
-app.stage.addChild(inventoryUI);
-
-// Создаём ячейки инвентаря
-for (let i = 0; i < maxInventorySlots; i++) {
-    const slot = new PIXI.Container();
-    const bg = new PIXI.Graphics();
-    bg.lineStyle(2, 0xFFFFFF);
-    bg.beginFill(0x333333);
-    bg.drawRect(0, 0, 50, 50);
-    bg.endFill();
-    slot.addChild(bg);
-    slot.bg = bg;
-
-    slot.x = (i % 4) * 55; // 4 слота в ряд
-    slot.y = Math.floor(i / 4) * 55;
-    inventoryUI.addChild(slot);
-}
-
-// Кнопка для открытия/закрытия инвентаря
-inventoryButton.on("pointerdown", () => {
-    inventoryUI.visible = !inventoryUI.visible; // Переключение видимости
-});
 
 //-----------------------------------------------------
 // 7. Анимация столкновений
@@ -548,45 +669,51 @@ function endGame() {
 // 11. Игровой цикл (ticker)
 //-----------------------------------------------------
 app.ticker.add(() => {
-  positionHPBars(); // Держим HP-бары над головой
 
-  if (!isFighting) return;
+  if (!isGameRunning) return; // Если игра не активна, ничего не делаем
 
-  fightFrame++;
+    positionHPBars(); // Держим HP-бары над головой
 
-  if (fightPhase === 0) {
-    // Фаза подхода
-    const alpha = fightFrame / approachFrames;
-    player.x = playerStartX + (meetingXPlayer - playerStartX) * alpha;
-    enemy.x  = enemyStartX  + (meetingXEnemy  - enemyStartX)  * alpha;
-
-    if (fightFrame >= approachFrames) {
-      fightPhase = 1;
-      fightFrame = 0;
-    }
-
-  } else if (fightPhase === 1) {
-    // Коллизия
-    if (fightFrame === 1) {
-      doDamagePhase();
-    }
-    if (fightFrame >= collisionFrames) {
-      fightPhase = 2;
-      fightFrame = 0;
-    }
-
-  } else if (fightPhase === 2) {
-    // Возврат
-    const alpha = fightFrame / retreatFrames;
-    player.x = meetingXPlayer + (playerStartX - meetingXPlayer) * alpha;
-    enemy.x  = meetingXEnemy  + (enemyStartX  - meetingXEnemy)  * alpha;
-
-    if (fightFrame >= retreatFrames) {
-      fightPhase = 0;
-      fightFrame = 0;
-      isFighting = false;
-    }
+    if (!isFighting) return;
+  
+    fightFrame++;
+  
+    if (fightPhase === 0) {
+      // Фаза подхода
+      const alpha = fightFrame / approachFrames;
+      player.x = playerStartX + (meetingXPlayer - playerStartX) * alpha;
+      enemy.x  = enemyStartX  + (meetingXEnemy  - enemyStartX)  * alpha;
+  
+      if (fightFrame >= approachFrames) {
+        fightPhase = 1;
+        fightFrame = 0;
+      }
+  
+    } else if (fightPhase === 1) {
+      // Коллизия
+      if (fightFrame === 1) {
+        doDamagePhase();
+      }
+      if (fightFrame >= collisionFrames) {
+        fightPhase = 2;
+        fightFrame = 0;
+      }
+  
+    } else if (fightPhase === 2) {
+      // Возврат
+      const alpha = fightFrame / retreatFrames;
+      player.x = meetingXPlayer + (playerStartX - meetingXPlayer) * alpha;
+      enemy.x  = meetingXEnemy  + (enemyStartX  - meetingXEnemy)  * alpha;
+  
+      if (fightFrame >= retreatFrames) {
+        fightPhase = 0;
+        fightFrame = 0;
+        isFighting = false;
+      }
   }
+
+
+
 });
 
 
@@ -674,38 +801,28 @@ function addItemToInventory(effect) {
 function updateInventoryUI() {
   inventoryUI.children.forEach((slot, index) => {
       if (!slot.bg) return; // Пропускаем слоты без фона
-      slot.removeChildren(); // Удаляем содержимое слота
+
+      const iconLayer = slot.getChildByName("iconLayer"); // Получаем слой для иконки
+      iconLayer.removeChildren(); // Очищаем слой
 
       const item = inventory[index];
 
       if (item) {
-        if (!item.effect) {
-          console.error(`Предмет с индексом ${index} не имеет эффекта!`);
-          return;
-        }
-        const iconPath = {
-          "reduceDamage": "armor_icon.png",
-          "increaseDamage": "weapon_icon.png",
-          "increaseHP": "body_icon.png"
+          const iconPath = {
+              "reduceDamage": "armor_icon.png",
+              "increaseDamage": "weapon_icon.png",
+              "increaseHP": "body_icon.png"
           }[item.effect];
-          
-          if (!iconPath) {
-              console.error(`Иконка для эффекта ${item.effect} не найдена!`);
+
+          if (iconPath) {
+              // Иконка предмета
+              const icon = PIXI.Sprite.from(iconPath);
+              icon.width = 40;
+              icon.height = 40;
+              icon.x = 5;
+              icon.y = 5;
+              iconLayer.addChild(icon);
           }
-
-
-
-          // Иконка предмета
-          try {
-            const icon = PIXI.Sprite.from(iconPath);
-            icon.width = 40;
-            icon.height = 40;
-            icon.x = 5;
-            icon.y = 5;
-            slot.addChild(icon);
-        } catch (error) {
-            console.error(`Ошибка при создании иконки для эффекта ${item.effect}:`, error);
-        }
 
           // Уровень предмета (например, "+2")
           const levelText = new PIXI.Text(`+${item.level}`, {
@@ -716,7 +833,7 @@ function updateInventoryUI() {
           levelText.anchor.set(0.5);
           levelText.x = 45;
           levelText.y = 45;
-          slot.addChild(levelText);
+          iconLayer.addChild(levelText);
 
           // Добавляем обработчик нажатия
           slot.interactive = true;
@@ -725,16 +842,17 @@ function updateInventoryUI() {
               showItemDescription(item.effect, iconPath, item.level);
           });
       } else {
-          // Пустой слот
+          // Если слот пуст, создаём стандартный стиль для пустого фона
           const placeholder = new PIXI.Graphics();
-          placeholder.lineStyle(1, 0x777777);
-          placeholder.beginFill(0x444444, 0.1);
-          placeholder.drawRect(5, 5, 40, 40);
+          placeholder.lineStyle(2, 0xFFFFFF); // Используем те же параметры
+          placeholder.beginFill(0x333333);   // Тот же фон, что и у заполненных слотов
+          placeholder.drawRect(0, 0, 50, 50);
           placeholder.endFill();
-          slot.addChild(placeholder);
+          iconLayer.addChild(placeholder);
       }
   });
 }
+
 
 
 function applyItemEffect(effect) {
@@ -874,41 +992,6 @@ function getItemDescription(effect) {
 }
 
 
-// function showNextScene() {
-//   if (currentSceneIndex >= scenes.length) {
-//       // Завершаем катсцену и начинаем игру
-//       app.stage.removeChild(cutsceneContainer);
-//       startGame(); // Функция, запускающая основную игру
-//       return;
-//   }
-
-//   const scene = scenes[currentSceneIndex];
-//   loadScene(scene.image, scene.text);
-//   currentSceneIndex++;
-// }
-
-// function loadScene(imagePath, text) {
-//   // Удаляем предыдущую сцену
-//   cutsceneContainer.removeChildren(1, cutsceneContainer.children.length - 1);
-
-//   // Загружаем новое изображение сцены
-//   const sceneImage = PIXI.Sprite.from(imagePath);
-//   sceneImage.width = app.screen.width;
-//   sceneImage.height = app.screen.height * 0.6;
-//   cutsceneContainer.addChildAt(sceneImage, 1);
-
-//   // Обновляем текст
-//   textField.text = "";
-//   let charIndex = 0;
-//   const typingInterval = setInterval(() => {
-//       if (charIndex < text.length) {
-//           textField.text += text[charIndex];
-//           charIndex++;
-//       } else {
-//           clearInterval(typingInterval); // Завершаем печать текста
-//       }
-//   }, 50); // Скорость появления текста (в мс)
-// }
 
 //-----------------------------------------------------
 // 12. Адаптив при resize (опционально)
@@ -918,3 +1001,17 @@ window.addEventListener("resize", () => {
 });
 
 
+function startGame() {
+  console.log("Начало основной игры...");
+
+  createGameBackground();
+  createPlayerAndEnemies();
+  createBtnUI();
+
+
+  isGameRunning = true; // Активируем игровой процесс
+
+  
+}
+
+startCutscene();
